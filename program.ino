@@ -15,9 +15,7 @@
   Threaded rod: Pitch = 1.25mm. Full revolution will move the glass slide 1.25mm
 
 */
-//#include <AccelStepper.h>
 
-//AccelStepper stepper (1, 5, 4);
 #define motionSeen 8
 #define openEndLimit 9
 #define closeEndLimit 7
@@ -27,24 +25,29 @@
 #define stepPin 4
 #define stopMotor A2
 
-int doorCloseSwitch = HIGH;
-int doorOpenSwitch = HIGH;
-
-bool isMovementOn = false;
-bool isDoorOpen = false;
-bool isDoorClose = false;
-
-int openEndVal = digitalRead(openEndLimit);
-int closeEndVal = digitalRead(closeEndLimit);
-
 int openingTravelDistance = 0;
 int closingTravelDistance = 0;
 
-boolean setDir = LOW;
+bool isMovementOn = false;
 
-unsigned long openTime = 0;
+int openEndState;
+int lastOpenEndState = HIGH;
+
+byte openEndIsPressed;
+
+unsigned long lastDebounceTime = 0;
+unsigned long debounceDelay = 50;
+
 unsigned long closeTime = 0;
 
+enum {
+  doorIsClosed,
+  doorIsOpen,
+  doorOpening,
+  doorClosing
+};
+
+unsigned char doorState = doorIsClosed;
 
 void openDoor() {
   Serial.println("Door open");
@@ -52,9 +55,9 @@ void openDoor() {
   digitalWrite(dirPin, HIGH);
   for (int i = 0; i < openingTravelDistance; i++) {
     digitalWrite(stepPin, HIGH);
-    delayMicroseconds(1000);
+    delayMicroseconds(600);
     digitalWrite(stepPin, LOW);
-    delayMicroseconds(1000);
+    delayMicroseconds(600);
   }
 }
 
@@ -64,19 +67,15 @@ void closeDoor() {
   digitalWrite(dirPin, LOW);
   for (int i = 0; i < closingTravelDistance; i++) {
     digitalWrite(stepPin, HIGH);
-    delayMicroseconds(1000);
+    delayMicroseconds(600);
     digitalWrite(stepPin, LOW);
-    delayMicroseconds(1000);
+    delayMicroseconds(600);
   }
 }
 
 void motorStop() {
   digitalWrite(stopMotor, LOW);
   Serial.println("Motor Has Stopped");
-}
-
-void motorRun() {
-  digitalWrite(stopMotor, HIGH);
 }
 
 void setup() {
@@ -91,8 +90,6 @@ void setup() {
   pinMode(stopMotor, OUTPUT);
 
 }
-
-
 
 void loop() {
 
@@ -113,6 +110,20 @@ void loop() {
   int sensorActive = digitalRead(motionSeen);
   int pirState = LOW;
 
+//  if (openEndVal != lastOpenEndState) {
+//    lastDebounceTime = millis();
+//  }
+//
+//  if ((millis() - lastDebounceTime) > debounceDelay) {
+//    if (openEndVal != openEndState) {
+//      openEndState = openEndVal;
+//
+//      if (openEndState == LOW) {
+//        openEndIsPressed = true;
+//      }
+//    }
+//  }
+
   if (sensorActive == 1) {
     pirState = 0;
     isMovementOn = true;
@@ -123,29 +134,39 @@ void loop() {
     }
   }
 
-  if (isMovementOn) {
-    if (millis() - openTime >= 5000) {
+  switch (doorState) {
+    case doorIsClosed:
+      if (isMovementOn) {
+        doorState = doorOpening;
+        break;
+      }
+      else {
+        break;
+      }
+
+    case doorOpening:
       openDoor();
-      startOpen = true;
-      openTime = millis();
-    }
+      doorState = doorIsOpen;
+      break;
 
-    if (startOpen and openEndVal == HIGH) {
-      motorStop();
-    }
-  }
+    case doorIsOpen:
+      if (millis() - closeTime > 20000) {
+        doorState = doorClosing;
+        break;
+      }
 
-  if (!isMovementOn) {
-    if (millis() - closeTime >= 20000) {
+    case doorClosing:
+      if (isMovementOn) {
+        motorStop();
+        doorState = doorOpening;
+        break;
+      }
       closeDoor();
-      startClose = true;
-      closeTime = millis();
-    }
+      doorState = doorIsClosed;
+      break;
 
-    if (startClose and closeEndVal == HIGH) {
-      motorStop();
-    }
+    default:
+      doorState = doorIsClosed;
+      break;
   }
 }
-
-
