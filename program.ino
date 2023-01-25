@@ -39,6 +39,7 @@ unsigned long lastDebounceTime = 0;
 unsigned long debounceDelay = 50;
 
 unsigned long closeTime = 0;
+unsigned long openTime = 0;
 
 enum {
   doorIsClosed,
@@ -50,32 +51,36 @@ enum {
 unsigned char doorState = doorIsClosed;
 
 void openDoor() {
-  Serial.println("Door open");
+  //  Serial.println("Door open");
 
   digitalWrite(dirPin, HIGH);
   for (int i = 0; i < openingTravelDistance; i++) {
     digitalWrite(stepPin, HIGH);
-    delayMicroseconds(600);
+    delayMicroseconds(500);
     digitalWrite(stepPin, LOW);
-    delayMicroseconds(600);
+    delayMicroseconds(500);
   }
 }
 
 void closeDoor() {
-  Serial.println("Door close");
+  //  Serial.println("Door close");
 
   digitalWrite(dirPin, LOW);
   for (int i = 0; i < closingTravelDistance; i++) {
     digitalWrite(stepPin, HIGH);
-    delayMicroseconds(600);
+    delayMicroseconds(500);
     digitalWrite(stepPin, LOW);
-    delayMicroseconds(600);
+    delayMicroseconds(500);
   }
 }
 
 void motorStop() {
   digitalWrite(stopMotor, LOW);
   Serial.println("Motor Has Stopped");
+}
+
+void motorRun() {
+  digitalWrite(stopMotor, HIGH);
 }
 
 void setup() {
@@ -88,6 +93,8 @@ void setup() {
   pinMode(dirPin, OUTPUT);
   pinMode(stepPin, OUTPUT);
   pinMode(stopMotor, OUTPUT);
+
+  digitalWrite(stopMotor, HIGH);
 
 }
 
@@ -110,21 +117,7 @@ void loop() {
   int sensorActive = digitalRead(motionSeen);
   int pirState = LOW;
 
-//  if (openEndVal != lastOpenEndState) {
-//    lastDebounceTime = millis();
-//  }
-//
-//  if ((millis() - lastDebounceTime) > debounceDelay) {
-//    if (openEndVal != openEndState) {
-//      openEndState = openEndVal;
-//
-//      if (openEndState == LOW) {
-//        openEndIsPressed = true;
-//      }
-//    }
-//  }
-
-  if (sensorActive == 1) {
+  if (sensorActive == HIGH) {
     pirState = 0;
     isMovementOn = true;
 
@@ -136,7 +129,9 @@ void loop() {
 
   switch (doorState) {
     case doorIsClosed:
+      Serial.println("I am in state 1");
       if (isMovementOn) {
+        motorRun();
         doorState = doorOpening;
         break;
       }
@@ -145,25 +140,48 @@ void loop() {
       }
 
     case doorOpening:
+      Serial.println("I am in state 2");
       openDoor();
-      doorState = doorIsOpen;
-      break;
+      if (openEndVal == HIGH ) {
+        motorStop();
+        if (millis() - openTime > 2000) {
+          Serial.println("Go to state 3");
 
-    case doorIsOpen:
-      if (millis() - closeTime > 20000) {
-        doorState = doorClosing;
+          doorState = doorIsOpen;
+          openTime = millis();
+          break;
+        }
+      } else {
+
         break;
       }
 
-    case doorClosing:
+    case doorIsOpen:
+      Serial.println("I am in state 3");
       if (isMovementOn) {
         motorStop();
         doorState = doorOpening;
         break;
+      } else {
+        if (millis() - closeTime > 5000) {
+          closeTime = millis();
+          doorState = doorClosing;
+          break;
+        }
       }
+
+    case doorClosing:
+      Serial.println("I am in state 4");
+      motorRun();
       closeDoor();
-      doorState = doorIsClosed;
-      break;
+      if (closeEndVal == HIGH) {
+        motorStop();
+        doorState = doorIsClosed;
+        closeTime = millis();
+        break;
+      } else {
+        break;
+      }
 
     default:
       doorState = doorIsClosed;
